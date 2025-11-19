@@ -5,6 +5,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>다중선형회귀란 무엇일까?</title>
     <style>
+         /* 새로 추가한 🎯 아이콘에 대한 스타일 */
+#ridgeIcon {
+    margin-right: 5px; /* 텍스트와의 간격 */
+    color: #ef4444; /* 빨간색 계열로 목표(🎯) 강조 */
+    cursor: pointer; /* 마우스 커서를 손가락 모양으로 바꿔서 클릭 가능함을 표시 */
+    font-size: 1.2em; /* 크기 약간 키우기 */
+    font-weight: bold;
+}
+/* [수정] 팝업 메시지 스타일 - 툴팁처럼 보이도록 수정 */
+#sparrowPopup {
+    position: absolute; /* 핵심: 절대 위치로 설정 (클릭 위치 기준으로 표시) */
+    background-color: #374151; /* 어두운 배경 */
+    color: white; /* 흰색 글자 */
+    padding: 6px 10px; /* 작은 크기 */
+    border-radius: 4px;
+    font-size: 0.85em; /* 작은 글씨 */
+    font-weight: normal;
+    white-space: nowrap; /* 내용이 한 줄로 나오도록 */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    opacity: 0; 
+    pointer-events: none; 
+    transition: opacity 0.2s ease-in-out; 
+}
+
+#sparrowPopup.show {
+    opacity: 1;
+}
+
+/* 툴팁 꼬리(선택 사항: 더 툴팁처럼 보이게 추가) */
+#sparrowPopup::after {
+    content: "";
+    position: absolute;
+    top: -5px; /* 툴팁 위쪽에 꼬리가 나오도록 위치 조정 */
+    left: 10px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent #374151 transparent; /* 꼬리 색상 */
+}
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -145,7 +184,6 @@
         </p>
 
         <div class="main-grid">
-            <!-- 왼쪽: 설정 패널 -->
             <div class="panel">
                 <h2>⚙️ 설정</h2>
 
@@ -187,11 +225,9 @@
                 </div>
             </div>
 
-            <!-- 오른쪽: 결과 -->
             <div class="panel">
                 <h2>📈 결과</h2>
 
-                <!-- 데이터 테이블 -->
                 <div class="table-wrapper">
                     <h3>📊 사용된 데이터 (모두 10개)</h3>
                     <div class="data-table-container">
@@ -203,7 +239,6 @@
                     <p class="description" style="margin-top:8px;">총 <strong id="dataCount">10</strong>개의 데이터로 학습했어요</p>
                 </div>
 
-                <!-- 산점도 + 계수표 -->
                 <div class="scatter-section">
                     <div class="chart-container">
                         <h3>🔮 예측값 vs 실제값 (산점도)</h3>
@@ -226,13 +261,11 @@
                     </div>
                 </div>
 
-                <!-- 예측 수식 -->
                 <div class="formula-box">
                     <h3>📝 예측 수식</h3>
                     <div class="formula" id="formula">y = 0.00</div>
                 </div>
 
-                <!-- 학습 포인트 -->
                 <div class="tips-section">
                     <p style="font-weight:600;margin-bottom:4px;">💡 관찰해보세요!</p>
                     <ul>
@@ -246,13 +279,13 @@
         </div>
 
         <div class="bottom-cards">
-            <div class="card"><h3>🎯 Ridge는 언제?</h3><p>속성(변수)이 많고 서로 관련이 있을 때! 모든 변수를 조금씩 사용해요.</p></div>
+            <div class="card"><h3><span id="ridgeIcon" class="query-icon">🎯</span> Ridge는 언제?</h3><p>속성(변수)이 많고 서로 관련이 있을 때! 모든 변수를 조금씩 사용해요.</p></div>
             <div class="card"><h3>🎯 Lasso는 언제?</h3><p>중요한 속성(변수)만 찾고 싶을 때! 필요없는 변수는 제거해요.</p></div>
             <div class="card"><h3>🎯 산점도는 언제?</h3><p>모델이 얼마나 잘 맞췄는지 확인할 때! y=x 초록선에 가까울수록 좋아요!</p></div>
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <div id="sparrowPopup">참새다!</div>
+    <script src="chart.umd.min.js"></script>
     <script>
         let currentScenario = 'student', regType = 'none', alpha = 0.1, l1Ratio = 0.5, scatterChart = null;
 
@@ -521,12 +554,44 @@
             updateResults();
         });
 
-        window.onload = function() {
-            initScatterChart();
-            updateTable();
-            updateResults();
-            updateRegInfo();
-        };
+        // ------------------------------------------------------------------
+        // ⭐️ [수정된 부분]: 툴팁이 클릭 위치 근처에 정확히 나타나도록 스크롤 위치 보정
+        // ------------------------------------------------------------------
+        function showSparrowPopup(e) {
+        const popup = document.getElementById('sparrowPopup');
+        
+        // 1. 위치 설정: e.clientX, e.clientY (화면 기준)에 스크롤된 양을 더해 문서 기준 위치로 변환합니다.
+        const leftPosition = e.clientX + window.scrollX + 10; // 기존 오른쪽 10px 이동 유지 + 스크롤 X 보정
+        const topPosition = e.clientY + window.scrollY - 30; // 기존 위로 30px 이동 유지 + 스크롤 Y 보정
+
+        popup.style.left = `${leftPosition}px`;
+        popup.style.top = `${topPosition}px`;
+        
+        // 2. 클래스 추가: CSS에 정의된 'show' 클래스를 추가하여 보이게 합니다.
+        popup.classList.add('show');
+        
+        // 3. 잠시 후 사라지도록 설정 (0.5초 후)
+        setTimeout(() => {
+            popup.classList.remove('show');
+        }, 500); 
+    }
+    
+    // ------------------------------------------------------------------
+    // window.onload 함수: 모든 초기화 및 이벤트 연결을 처리합니다.
+    // ------------------------------------------------------------------
+    window.onload = function() {
+        // 1. 핵심 기능 초기화 (그래프, 테이블, 결과)
+        initScatterChart();
+        updateTable();
+        updateResults();
+        updateRegInfo();
+
+        // 2. 툴팁 이벤트 연결 (아이콘이 로드된 후 연결)
+        const sparrowIcon = document.getElementById('ridgeIcon');
+        if(sparrowIcon) {
+            sparrowIcon.addEventListener('click', showSparrowPopup);
+        }
+    };
     </script>
 </body>
 </html>
